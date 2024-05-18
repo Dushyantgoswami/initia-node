@@ -25,6 +25,7 @@ Navigate into the cloned repository:
 
 ```sh
 cd initia-node
+```
 
 ### 3. Set Script Permissions
 
@@ -32,7 +33,7 @@ Ensure the install_initia.sh script has execute permissions:
 
 ```sh
 chmod +x install_initia.sh
-
+```
 
 ### 4. Run the Installation Script
 
@@ -40,7 +41,7 @@ Execute the script to install and set up Initia Node. Replace node_name with you
 
 ```sh
 ./install_initia.sh node_name
-
+```
 
 ## Script Functionality
 
@@ -56,6 +57,7 @@ After the script completes, verify that Go and Make are correctly installed and 
 ```sh
 go version
 make --version
+```
 
 ## Troubleshooting
 
