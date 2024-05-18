@@ -1,5 +1,19 @@
-Save this script as install_initia.sh and run it with bash install_initia.sh.
-Make sure to give the script execute permissions with: 
-run : chmod +x install_initia.sh
-Then run the script: ./install_initia.sh
-This script will automatically handle the installation and setup, and it will verify the versions of Go and Make as specified.
+# Initia Node Installation Guide
+
+This README provides instructions for cloning the Initia Node repository, setting up the environment, and verifying the installation. Follow these steps to ensure a successful setup.
+
+## Prerequisites
+
+Before running the script, ensure you have the following:
+
+- Git installed on your system.
+- Necessary permissions to execute scripts.
+
+## Installation Steps
+
+### 1. Clone the Repository
+
+First, clone the Initia Node repository from GitHub:
+
+```sh
+git clone https://github.com/Dushyantgoswami/initia-node.git
