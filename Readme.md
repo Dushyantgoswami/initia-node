@@ -16,7 +16,7 @@ Before running the script, ensure you have the following:
 First, clone the Initia Node repository from GitHub:
 
 ```sh
-git clone https://github.com/Dushyantgoswami/initia-node.git
+git clone https://github.com/Dushyantgoswami/initia-node.git```
 
 ### 2. Change to the Repository Directory
 
