@@ -1,59 +1,25 @@
 #!/bin/bash
 
-# Function to install dependencies and setup Flask application
-setup_flask_app() {
-    # Install required packages
-    sudo apt update
-    sudo apt install -y python3-pip python3-venv nginx
+if [ $# -ne 1 ]; then
+    echo "Usage: $0 <your_server_ip>"
+    exit 1
+fi
 
-    # Clone or copy your Flask application to the correct directory
-    # Adjust this path accordingly if your application is located elsewhere
-    sudo cp -r /path/to/your/flask/application /var/www/initia_status
+server_ip="$1"
 
-    # Create and activate virtual environment
-    cd /var/www/initia_status
-    python3 -m venv venv
-    source venv/bin/activate
+# Step 1: Install Nginx
+sudo apt update
+sudo apt install nginx -y
 
-    # Install Flask and other dependencies
-    pip install flask
+# Start Nginx
+sudo systemctl start nginx
+sudo systemctl enable nginx
 
-    # Deactivate virtual environment
-    deactivate
-}
+# Step 2: Create a Simple Web Interface
+sudo mkdir -p /var/www/initia_status
+sudo chown -R $USER:$USER /var/www/initia_status
 
-# Function to configure Nginx
-configure_nginx() {
-    # Create Nginx configuration file
-    sudo tee /etc/nginx/sites-available/initia_status > /dev/null <<EOF
-server {
-    listen 80;
-    server_name $1; # Use the provided server IP address
-
-    location / {
-        include proxy_params;
-        proxy_pass http://127.0.0.1:5000;
-    }
-}
-EOF
-
-    # Enable the site by creating a symbolic link
-    sudo ln -s /etc/nginx/sites-available/initia_status /etc/nginx/sites-enabled/
-
-    # Remove the default Nginx configuration
-    sudo rm /etc/nginx/sites-enabled/default
-
-    # Reload Nginx to apply changes
-    sudo systemctl reload nginx
-}
-
-# Function to start Flask application as a background process
-start_flask_app() {
-    # Activate virtual environment
-    source /var/www/initia_status/venv/bin/activate
-
-    # Create HTML file with the status template
-    sudo tee /var/www/initia_status/templates/status.html > /dev/null <<EOF
+cat <<EOF | sudo tee /var/www/initia_status/index.html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -101,8 +67,14 @@ start_flask_app() {
             }
         }
 
+
+
         function displayNodeStatus(data) {
             const statusDiv = document.getElementById('status');
+            const networkHeight = parseInt(data.sync_info.latest_block_height);
+            const nodeHeight = networkHeight; // Using network height for node height
+            const blocksLeft = networkHeight - nodeHeight;
+
             statusDiv.innerHTML = \`
                 <p><strong>Node Moniker:</strong> \${data.node_info.moniker}</p>
                 <p><strong>Chain ID:</strong> \${data.node_info.network}</p>
@@ -110,45 +82,110 @@ start_flask_app() {
                 <p><strong>Latest Block Time:</strong> \${new Date(data.sync_info.latest_block_time).toLocaleString()}</p>
                 <p><strong>Catching Up:</strong> \${data.sync_info.catching_up}</p>
                 <hr>
-                <p><strong>Your Node Height:</strong> \${data.sync_info.latest_block_height}</p>
-                <p><strong>Network Height:</strong> \${data.sync_info.latest_block_height}</p>
-                <p><strong>Blocks Left:</strong> 0</p> <!-- Assuming blocks_left is always 0 based on your previous information -->
+                <p><strong>Your Node Height:</strong> \${nodeHeight}</p>
+                <p><strong>Network Height:</strong> \${networkHeight}</p>
+                <p><strong>Blocks Left:</strong> \${blocksLeft}</p>
             \`;
         }
 
+
+
         fetchNodeStatus();
-    </script>
+       </script>
 </body>
 </html>
 EOF
 
-    # Start Flask application
-    nohup flask run --host=127.0.0.1 --port=5000 > /dev/null 2>&1 &
+# Step 3: Set Up a Proxy to Serve Node Status
+sudo apt install python3-pip -y
+pip3 install flask requests
 
-    # Deactivate virtual environment
-    deactivate
+cat <<EOF | sudo tee /var/www/initia_status/app.py
+from flask import Flask, jsonify
+import subprocess
+import json
+import psutil  # Import psutil for system information
+
+app = Flask(__name__)
+
+def get_node_status():
+    try:
+        # Get local node status
+        local_status = subprocess.run(["initiad", "status"], capture_output=True, text=True)
+        local_data = json.loads(local_status.stdout)
+
+        # Get network status
+        network_status = subprocess.run(["curl", "-s", "https://rpc-initia-testnet.trusted-point.com/status"], capture_output=True, text=True)
+        network_data = json.loads(network_status.stdout)
+
+        local_height = int(local_data['sync_info']['latest_block_height'])
+        network_height = int(network_data['result']['sync_info']['latest_block_height'])
+        blocks_left = network_height - local_height
+
+        return {
+            "node_info": local_data['node_info'],
+            "sync_info": local_data['sync_info'],
+            "network_sync_info": network_data['result']['sync_info'],
+            "local_height": local_height,
+            "network_height": network_height,
+            "blocks_left": blocks_left,
+        }
+    except Exception as e:
+        print("Error retrieving system information:", e)
+        return None
+
+@app.route('/status', methods=['GET'])
+def status():
+    data = get_node_status()
+    return jsonify(data)
+
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0')
+
+EOF
+
+# Step 4: Configure Nginx to Proxy Requests to the Flask App
+cat <<EOF | sudo tee /etc/nginx/sites-available/initia_status
+server {
+    listen 80;
+    server_name $server_ip;
+
+    location / {
+        root /var/www/initia_status;
+        index index.html;
+    }
+
+    location /status {
+        proxy_pass http://localhost:5000/status;
+    }
 }
+EOF
 
-# Main function
-main() {
-    # Check if server IP argument is provided
-    if [ -z "$1" ]; then
-        echo "Error: Server IP address not provided."
-        exit 1
-    fi
+sudo ln -s /etc/nginx/sites-available/initia_status /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl restart nginx
 
-    # Setup Flask application
-    setup_flask_app
+# Step 5: Access Your Website
+echo "Your Initia Node Status website is now accessible at http://$server_ip"
 
-    # Configure Nginx with provided server IP address
-    configure_nginx "$1"
+# Optional: Run Flask App as a Service
+cat <<EOF | sudo tee /etc/systemd/system/initia_status.service
+[Unit]
+Description=Initia Status Web App
+After=network.target
 
-    # Start Flask application
-    start_flask_app
+[Service]
+User=root
+WorkingDirectory=/var/www/initia_status
+ExecStart=/usr/bin/python3 /var/www/initia_status/app.py
+Restart=always
 
-    # Display status message
-    echo "Initia Status Web App is now running. You can access it at http://$1"
-}
+[Install]
+WantedBy=multi-user.target
+EOF
 
-# Execute main function with provided server IP address
-main "$1"
+sudo systemctl enable initia_status
+sudo systemctl start initia_status
+
+echo "Initia Status Web App service is now running."
