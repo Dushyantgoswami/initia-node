@@ -52,9 +52,78 @@ start_flask_app() {
     # Activate virtual environment
     source /var/www/initia_status/venv/bin/activate
 
+    # Create HTML file with the status template
+    sudo tee /var/www/initia_status/templates/status.html > /dev/null <<EOF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Initia Node Status</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        .status {
+            background-color: #f9f9f9;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        .status p {
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Initia Node Status</h1>
+    <div class="status" id="status">
+        Loading node status...
+    </div>
+
+    <script>
+        async function fetchNodeStatus() {
+            try {
+                const response = await fetch('/status');
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                const data = await response.json();
+                displayNodeStatus(data);
+            } catch (error) {
+                document.getElementById('status').innerHTML = '<p>Error loading node status</p>';
+                console.error('There was a problem with the fetch operation:', error);
+            }
+        }
+
+        function displayNodeStatus(data) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = \`
+                <p><strong>Node Moniker:</strong> \${data.node_info.moniker}</p>
+                <p><strong>Chain ID:</strong> \${data.node_info.network}</p>
+                <p><strong>Latest Block Height:</strong> \${data.sync_info.latest_block_height}</p>
+                <p><strong>Latest Block Time:</strong> \${new Date(data.sync_info.latest_block_time).toLocaleString()}</p>
+                <p><strong>Catching Up:</strong> \${data.sync_info.catching_up}</p>
+                <hr>
+                <p><strong>Your Node Height:</strong> \${data.sync_info.latest_block_height}</p>
+                <p><strong>Network Height:</strong> \${data.sync_info.latest_block_height}</p>
+                <p><strong>Blocks Left:</strong> 0</p> <!-- Assuming blocks_left is always 0 based on your previous information -->
+            \`;
+        }
+
+        fetchNodeStatus();
+    </script>
+</body>
+</html>
+EOF
+
     # Start Flask application
-    cd /var/www/initia_status
-    nohup python3 app.py > /dev/null 2>&1 &
+    nohup flask run --host=127.0.0.1 --port=5000 > /dev/null 2>&1 &
 
     # Deactivate virtual environment
     deactivate
